@@ -1,5 +1,6 @@
 from subprocess import check_output
 import subprocess
+import random
 
 
 def traffic_shaping(mode, interface, add, **kwargs):
@@ -93,7 +94,7 @@ def tcpdump_command(aim_ips: list, ports: list, filename=None):
 
 def cmd_at(host, func, ifbackend=False, ifprint=True, **kwargs):
     """
-    host : cmd at
+    host : [mininet host switch or server] cmd at
     func : command func
     ifbackend : bool default is False
     **kwargs : params for func
@@ -109,3 +110,7 @@ def cmd_at(host, func, ifbackend=False, ifprint=True, **kwargs):
 def kill_pid_by_name(name: str):
     pid = int(check_output(["pidof", "-s", f"{name}"]))
     subprocess.call(["kill %d" % pid], shell=True)
+
+
+def generate_random_paths_num(min, max):
+    return random.randint(min, max)

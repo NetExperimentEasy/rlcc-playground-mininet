@@ -1,6 +1,6 @@
 
 import time
-from .topo import multiTopo
+from .topo import build_topo
 from mininet.net import Mininet
 from mininet.node import Node
 from mininet.cli import CLI
@@ -24,7 +24,8 @@ class RlccMininet:
     def __init__(self,
                  map_c_2_rlcc_flag: dict,
                  XQUIC_PATH: str,
-                 Topo=multiTopo,
+                 network: Mininet,
+                 root_switch: str = "sw1",
                  root_ip='10.0.0.123/32',
                  root_routes=['10.0.0.0/24'],
                  redis_ip='0.0.0.0',
@@ -32,7 +33,8 @@ class RlccMininet:
                  ) -> None:
         """
         map_c_2_rlcc_flag : dict 'clientname' : 'rlccflag'
-        Topo : Train Topo
+        network : build_topo(args, topo) -> Mininet()
+        root_switch : switch that be attached to rootNs
         root_ip : link to root interface
         root_route : route of root interface
         """
@@ -42,6 +44,7 @@ class RlccMininet:
         self.timestamp = dict(zip(map_c_2_rlcc_flag.values(), [
                               time.time() for _ in map_c_2_rlcc_flag.keys()]))
         self.Xquic_path = XQUIC_PATH
+        self.root_switch = root_switch
 
         # init lock
         self.LOCK = None
@@ -59,8 +62,7 @@ class RlccMininet:
 
         # init Topo
         info("\n*** Init Mininet Topo \n")
-        topo = Topo(len(self.map_c_2_rlcc_flag.keys()))
-        self.network = Mininet(topo, waitConnected=True)
+        self.network = network
 
         # connect to local interface
         info(f"\n*** Connect to local root note :{self.root_ip} \n")
@@ -95,7 +97,7 @@ class RlccMininet:
         switch: switch to connect to root namespace
         ip: IP address for root namespace node
         routes: host networks to route to"""
-        sw1 = self.network['sw1']
+        sw1 = self.network[self.root_switch]
         # Create a node in root namespace and link to switch
         root = Node('root', inNamespace=False)
         intf = self.network.addLink(root, sw1).intf1

@@ -1,6 +1,6 @@
 from core.rlccenv import RlccMininet, PcapAt
-from core.topo import build_topo, multiTopo
 from mininet.log import setLogLevel
+from core.topo import build_topo, multiPathTopo
 
 setLogLevel('info')
 
@@ -19,14 +19,11 @@ map_c_2_rlcc_flag = {
     'c10': "1010",
 }
 
-pcaplist = [
-    PcapAt('c1', ['ser1'], ['8443'])
-]
+network = build_topo(len(map_c_2_rlcc_flag.keys()), max_paths_num=4, topo=multiPathTopo)
 
-network = build_topo(len(map_c_2_rlcc_flag.keys()), topo=multiTopo)
+Exp = RlccMininet(map_c_2_rlcc_flag, network=network, root_switch="sw11", XQUIC_PATH=XQUIC_PATH)
 
-Exp = RlccMininet(map_c_2_rlcc_flag, network=network, XQUIC_PATH=XQUIC_PATH)
+sw1 = Exp.network.get(f"sw21")
+print("------", sw1.intfs)
 
-# Exp.cli()
-
-Exp.run_exp("fix", pcaplist)
+Exp.cli()

@@ -2,6 +2,8 @@
 
 TODO:
 - [ ] make core better
+    - [ ] 将实验和环境生成分离，抽象化实验代码，实现可以用iperf进行tcp相关的实验（后续ebpf实现RL后，进行rl训练）
+    - [ ] 根据通信方式的不同，也可以将通信方式抽离出来，便于与不同gym环境交互
 - [ ] add multipath Topo
 
 
