@@ -18,13 +18,14 @@ class PcapAt:
     host: str
     aim_hosts: list
     aim_ports: list
+    filename: str = None
 
 
 class RlccMininet:
     def __init__(self,
                  map_c_2_rlcc_flag: dict,
                  XQUIC_PATH: str,
-                 network: Mininet,
+                 topo: Mininet,
                  root_switch: str = "sw1",
                  root_ip='10.0.0.123/32',
                  root_routes=['10.0.0.0/24'],
@@ -33,7 +34,7 @@ class RlccMininet:
                  ) -> None:
         """
         map_c_2_rlcc_flag : dict 'clientname' : 'rlccflag'
-        network : build_topo(args, topo) -> Mininet()
+        topo : build_topo(args, topo) -> Mininet()
         root_switch : switch that be attached to rootNs
         root_ip : link to root interface
         root_route : route of root interface
@@ -62,21 +63,21 @@ class RlccMininet:
 
         # init Topo
         info("\n*** Init Mininet Topo \n")
-        self.network = network
+        self.topo = topo
 
         # connect to local interface
         info(f"\n*** Connect to local root note :{self.root_ip} \n")
         self.connect_to_rootNS()
 
         info("\n*** Hosts addresses:\n")
-        for host in self.network.hosts[1:]:
+        for host in self.topo.hosts[1:]:
             info(host.name, host.IP(), '\n')
 
-        for item in self.network.switches:
+        for item in self.topo.switches:
             info(f"*** Init bottleneck property: {item.name}\n")
             self.set_fix_env(item, ifpublish=False)
 
-        self.pool = ThreadPoolExecutor(max_workers=len(self.network.hosts))
+        self.pool = ThreadPoolExecutor(max_workers=len(self.topo.hosts))
 
     def init_lock(self):
         """
@@ -97,13 +98,13 @@ class RlccMininet:
         switch: switch to connect to root namespace
         ip: IP address for root namespace node
         routes: host networks to route to"""
-        sw1 = self.network[self.root_switch]
+        sw1 = self.topo[self.root_switch]
         # Create a node in root namespace and link to switch
         root = Node('root', inNamespace=False)
-        intf = self.network.addLink(root, sw1).intf1
+        intf = self.topo.addLink(root, sw1).intf1
         root.setIP(self.root_ip, intf=intf)
         # Start network that now includes link to root namespace
-        self.network.start()
+        self.topo.start()
         # Add routes from root ns to hosts
         for route in self.root_routes:
             root.cmd('route add -net ' + route + ' dev ' + str(intf))
@@ -155,18 +156,18 @@ class RlccMininet:
 
     def cli(self):
         try:
-            CLI(self.network)
+            CLI(self.topo)
         except:
             self.stop()
 
     def stop(self):
-        self.network.stop()
+        self.topo.stop()
 
     def run_client(self, host, ifdellock=True):
         start = time.time()
         id = int(host.name[1:])
         rlcc_flag = self.map_c_2_rlcc_flag[host.name]
-        aim_server = self.network.get(f'ser{id}')
+        aim_server = self.topo.get(f'ser{id}')
         cmd_at(host, xquic_command, ifprint=False,
                type="client",
                XQUIC_PATH=self.Xquic_path,
@@ -188,13 +189,8 @@ class RlccMininet:
         """
         info("\n ---RLCC experiment start---\n")
 
-        info("Generate key\n")
-        c1 = self.network.get("c1")
-        cmd_at(c1, generate_xquic_tls)
-        info("Generate ok\n")
-
         info("Start xquic server\n")
-        for item in [s for s in self.network.hosts if
+        for item in [s for s in self.topo.hosts if
                      s.name.startswith('ser')]:
             cmd_at(item, xquic_command, ifbackend=True,
                    type='server',
@@ -203,6 +199,7 @@ class RlccMininet:
 
         msg_stream = self.pub.listen()
 
+        host = None
         try:
             for msg in msg_stream:
                 if msg["type"] == "message":
@@ -215,7 +212,7 @@ class RlccMininet:
                     if rlcc_flag.endswith("stop"): # 超时主动关闭流
                         rlcc_flag = rlcc_flag[:-4]
                         host_name = self.map_rlcc_flag_2_c[rlcc_flag]
-                        host = self.network.get(host_name)
+                        host = self.topo.get(host_name)
                         self.del_lock(rlcc_flag)
                         print(f"{rlcc_flag}:"
                             + "steps are too long, restart the flow")
@@ -223,8 +220,8 @@ class RlccMininet:
                         
                     if self.LOCK[rlcc_flag] == 0:      # 收到重复消息时，由于🔓，不会重启流引发错误
                         host_name = self.map_rlcc_flag_2_c[rlcc_flag]
-                        host = self.network.get(host_name)
-                        switch = self.network.get(f"sw{host_name[1:]}")
+                        host = self.topo.get(host_name)
+                        switch = self.topo.get(f"sw{host_name[1:]}")
                         if mode == "random":
                             self.set_random_env(
                                 switch, rlcc_flag=rlcc_flag)      # 随机重置环境
@@ -243,15 +240,20 @@ class RlccMininet:
                             f"::start rlcc_flag: {rlcc_flag} on : {host_name}")
 
         except KeyboardInterrupt:
-            self.rp.publish(
-                'mininet', f"rlcc_flag:{self.map_c_2_rlcc_flag[host.name]};"
-                + "state:stop_by_mininet")
+            if host:
+                self.rp.publish(
+                    'mininet', f"rlcc_flag:{self.map_c_2_rlcc_flag[host.name]};"
+                    + "state:stop_by_mininet")
+            else:
+                self.rp.publish(
+                    'mininet', f"rlcc_flag:None;"
+                    + "state:stop_by_mininet")
             self.pool.shutdown()
             self.stop()
 
         self.stop()
 
-    def run_exp(self, mode, pcaplist: list[PcapAt], filename=None):
+    def run_exp(self, mode, pcaplist: list[PcapAt]):
         """
         mode : random : random env ,
                 fix   :    fix env ,
@@ -260,13 +262,8 @@ class RlccMininet:
         """
         info("\n ---RLCC experiment start---\n")
 
-        info("Generate key\n")
-        c1 = self.network.get("c1")
-        cmd_at(c1, generate_xquic_tls)
-        info("Generate ok\n")
-
         info("Start xquic server\n")
-        for item in [s for s in self.network.hosts if
+        for item in [s for s in self.topo.hosts if
                      s.name.startswith('ser')]:
             cmd_at(item, xquic_command, ifbackend=True,
                    type='server',
@@ -274,14 +271,16 @@ class RlccMininet:
         info("Start ok\n")
 
         for clitem in pcaplist:
-            host = self.network.get(clitem.host)
-            aim_ips = [self.network.get(j).IP() for j in clitem.aim_hosts]
+            host = self.topo.get(clitem.host)
+            aim_ips = [self.topo.get(j).IP() for j in clitem.aim_hosts]
             cmd_at(host, tcpdump_command, ifbackend=True,
                    aim_ips=aim_ips,
-                   ports=clitem.aim_ports)
+                   ports=clitem.aim_ports,
+                   filename=clitem.filename)
 
         msg_stream = self.pub.listen()
 
+        host = None
         try:
             for msg in msg_stream:
                 if msg["type"] == "message":
@@ -294,7 +293,7 @@ class RlccMininet:
                     if rlcc_flag.endswith("stop"): # 超时主动关闭流
                         rlcc_flag = rlcc_flag[:-4]
                         host_name = self.map_rlcc_flag_2_c[rlcc_flag]
-                        host = self.network.get(host_name)
+                        host = self.topo.get(host_name)
                         self.del_lock(rlcc_flag)
                         print(f"{rlcc_flag}:"
                             + "steps are too long, restart the flow")
@@ -302,8 +301,8 @@ class RlccMininet:
 
                     if self.LOCK[rlcc_flag] == 0:      # 收到重复消息时，由于🔓，不会重启流引发错误
                         host_name = self.map_rlcc_flag_2_c[rlcc_flag]
-                        host = self.network.get(host_name)
-                        switch = self.network.get(f"sw{host_name[1:]}")
+                        host = self.topo.get(host_name)
+                        switch = self.topo.get(f"sw{host_name[1:]}")
                         if mode == "random":
                             self.set_random_env(
                                 switch, rlcc_flag=rlcc_flag)      # 随机重置环境
@@ -323,19 +322,24 @@ class RlccMininet:
                             f"::start rlcc_flag: {rlcc_flag} on : {host_name}")
 
         except KeyboardInterrupt:
-            self.rp.publish(
-                'mininet', f"rlcc_flag:{self.map_c_2_rlcc_flag[host.name]};"
-                + "state:stop_by_mininet")
+            if host:
+                self.rp.publish(
+                    'mininet', f"rlcc_flag:{self.map_c_2_rlcc_flag[host.name]};"
+                    + "state:stop_by_mininet")
+            else:
+                self.rp.publish(
+                    'mininet', f"rlcc_flag:None;"
+                    + "state:stop_by_mininet")
             self.pool.shutdown()
             # 退出pcap
             for clitem in pcaplist:
-                host = self.network.get(clitem.host)
+                host = self.topo.get(clitem.host)
                 kill_pid_by_name("tcpdump")
             self.stop()
 
         # 退出pcap
         for clitem in pcaplist:
-            host = self.network.get(clitem.host)
+            host = self.topo.get(clitem.host)
             kill_pid_by_name("tcpdump")
 
         self.stop()

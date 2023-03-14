@@ -1,6 +1,7 @@
 from core.rlccenv import RlccMininet, PcapAt
 from mininet.log import setLogLevel
 from core.topo import build_topo, multiPathTopo
+from core.utils import cmd_at, generate_xquic_tls
 
 setLogLevel('info')
 
@@ -19,11 +20,13 @@ map_c_2_rlcc_flag = {
     'c10': "1010",
 }
 
-network = build_topo(len(map_c_2_rlcc_flag.keys()), max_paths_num=4, topo=multiPathTopo)
+topo = build_topo(len(map_c_2_rlcc_flag.keys()), max_paths_num=4, topo=multiPathTopo)
 
-Exp = RlccMininet(map_c_2_rlcc_flag, network=network, root_switch="sw11", XQUIC_PATH=XQUIC_PATH)
+Exp = RlccMininet(map_c_2_rlcc_flag, topo=topo, root_switch="sw11", XQUIC_PATH=XQUIC_PATH)
 
-sw1 = Exp.network.get(f"sw21")
-print("------", sw1.intfs)
+# Generate TLS key
+c1 = Exp.topo.get("c1")
+cmd_at(c1, generate_xquic_tls)
 
+# open exp cli
 Exp.cli()

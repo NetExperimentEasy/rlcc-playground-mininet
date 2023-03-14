@@ -8,10 +8,9 @@ from mininet.util import info
 from .utils import generate_random_paths_num
 
 import sys
-import random
 
 
-class multiTopo(Topo):
+class baseTopo(Topo):
     "Simple topology with multiple envs(links)"
     """
                                   
@@ -97,15 +96,15 @@ class multiPathTopo(Topo):
                     switch1list.append(swi)
 
         for item in switch1list[1:]:
-            self.addLink(switch1list[0], item) # 将sw11与每一个swi1相连
+            self.addLink(switch1list[0], item) # 将sw11与每一个sw[i]1相连
 
-def build_topo(n, paths_num=None, max_paths_num=None, topo=multiTopo):
+def build_topo(n, paths_num=None, max_paths_num=None, topo=baseTopo):
     """
     general args:
     n : number of envs
 
     multiPathTopo args:
-    paths_num : number of paths in each env
+    paths_num : number of path in each env
     max_paths_num : max number of paths in each env
 
     if you set paths_num, each env will consist of [paths_num] paths,
@@ -113,7 +112,7 @@ def build_topo(n, paths_num=None, max_paths_num=None, topo=multiTopo):
     nums paths. 
     """
 
-    if topo == multiTopo:
+    if topo == baseTopo:
         t = topo(n)
     if topo == multiPathTopo:
         t = topo(n, paths_num, max_paths_num)
@@ -122,7 +121,7 @@ def build_topo(n, paths_num=None, max_paths_num=None, topo=multiTopo):
 
 def runMultiLinkTopo():
     "Create and run multiple link network"
-    topo = multiTopo(n=2)
+    topo = baseTopo(n=2)
     net = Mininet(topo=topo, link=TCLink, waitConnected=True)
     net.start()
     CLI(net)

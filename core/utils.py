@@ -97,6 +97,7 @@ def cmd_at(host, func, ifbackend=False, ifprint=True, **kwargs):
     host : [mininet host switch or server] cmd at
     func : command func
     ifbackend : bool default is False
+    ifprint : bool default is True
     **kwargs : params for func
     """
     command = func(**kwargs)
