@@ -183,19 +183,23 @@ class RlccEnv(gym.Env):
         # rtt_good = (rtt_diff*100 / (np.absolute(rtt_diff) + state[4])) + 5  # 增加为+ 减少为- 鼓励降低延迟 惩罚增加延迟，+5抵消波动，适当容忍延迟波动
         # reward = goodvalue - rtt_good
         
-        # # base reward
-        # # throughput - rtt_change(rtt - min_rtt)
+        # base reward
+        # throughput - rtt_change(rtt - min_rtt)
         reward = state[-2] - state[2] + state[3]
 
         # # owl reward
+        # if state[-1]<1:
+        #     state[-1]=1
         # loss = state[6] / state[-1]  # 这个丢包率是不是得长期丢包率？
-        # # sending_rate = state[-2]
+        # # # sending_rate = state[-2]
         # deta = 0.5
-        # reward = state[-2] - deta * (1/(1-loss))
+        # reward = state[-2] - deta * (1/(1-loss)) # ?有问题，很小
 
         # # aurora reward
+        # if state[-1]<1:
+        #     state[-1]=1
         # loss = state[6] / state[-1]  # loss of this sample interval
-        # reward = 10*state[-2] - 1000*state[2] - 2000*loss
+        # reward = 10*state[-2] - 1000*state[2] - 2000*loss  # 这个奖励在异构训练环境，奖励会不均匀
 
         # # copa reward
         # # log(throughput) - beta * log(delay)
@@ -294,12 +298,13 @@ class RlccEnv(gym.Env):
             self.reset()
         print(f"reset : {self.rlcc_flag} : {self.state}")
         
-        # # tianshou
+        # # tianshou, sampleFactory
         # # state, info
-        # return self.state, {}
+        return self.state[:-3], {}
 
         # # rllib 
-        return self.state[:-3]      # 最后三位是专属用于计算奖励
+        # return self.state[:-3]      # 最后三位是专属用于计算奖励
+        
 
     def step(self, action):
         
@@ -308,7 +313,13 @@ class RlccEnv(gym.Env):
         if self.step_count >= self.maxsteps:
             self.rp.publish('redis', f"{self.rlcc_flag}stop")
             self.step_count = 0
-            return self.last_state[:-3], self.reward_function(self.last_state), True, {}
+            # # return
+            # # old api
+            # return self.last_state[:-3], self.reward_function(self.last_state), True, {}
+
+            # # new api https://github.com/openai/gym/pull/2752
+            # # state, reward, terminated, truncated, info
+            return self.last_state[:-3], self.reward_function(self.last_state), False, True, {}
 
         # 动作处理，适应不同的RL框架
         if self.plan >= 2:  # 离散cwnd动作
@@ -329,12 +340,28 @@ class RlccEnv(gym.Env):
 
         # 获取下一步状态
         self.state = self._get_obs()
-        # 流结束
+        
+        # # 流结束
+        
+        # # old api
+        # if len(self.state) == 1:
+        #     # # return
+        #     return self.last_state[:-3], self.reward_function(self.last_state), True, {}
+        # # state, reward, done, info
+        # self.last_state = self.state
+        # # # return
+        # return self.state[:-3], self.reward_function(self.state), False, {}
+    
+        # # new api https://github.com/openai/gym/pull/2752
+        # # state, reward, terminated, truncated, info
         if len(self.state) == 1:
-            return self.last_state[:-3], self.reward_function(self.last_state), True, {}
+            # # return
+            return self.last_state[:-3], self.reward_function(self.last_state), True, False, {}
         # state, reward, done, info
         self.last_state = self.state
-        return self.state[:-3], self.reward_function(self.state), False, {}
+        # # return
+        return self.state[:-3], self.reward_function(self.state), False, False, {}
+        
 
     def render(self):
         return

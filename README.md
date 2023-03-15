@@ -11,7 +11,10 @@ https://zhuanlan.zhihu.com/p/576832894
 ### streamlit
 pip install streamlit
 
-pip install --upgrade protobuf
+> if protobuf got err
+<!-- pip install --upgrade protobuf -->
+pip install protobuf==3.20.1
+
 
 ### redis-py & redis
 sudo apt install redis
@@ -34,7 +37,7 @@ cd tmp
 sudo python ../train.py
 
 
-> 注意：tmp中需要xquic运行所需的密钥文件，github仓库未提供，可以按照xquic的说明使用openssh生成
+> 注意：tmp中需要xquic运行所需的密钥文件，github仓库未提供，可以按照xquic的说明使用openssl生成
 
 启动web监控界面
 
