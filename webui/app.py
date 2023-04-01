@@ -104,7 +104,7 @@ if __name__ == "__main__":
         # "rlccstate_1009",
         # "rlccstate_1010",
     ]
-    datasource = DataSource(channels=channels_list)
+    datasource = DataSource(channels=channels_list, redis_ip="127.0.0.1", redis_port=6379)
     datasource.run_collector()
     showarea = {}
     st.set_page_config(layout="wide")

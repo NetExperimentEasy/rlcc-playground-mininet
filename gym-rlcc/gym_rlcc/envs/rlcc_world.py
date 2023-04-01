@@ -183,8 +183,8 @@ class RlccEnv(gym.Env):
         # rtt_good = (rtt_diff*100 / (np.absolute(rtt_diff) + state[4])) + 5  # 增加为+ 减少为- 鼓励降低延迟 惩罚增加延迟，+5抵消波动，适当容忍延迟波动
         # reward = goodvalue - rtt_good
         
-        # base reward
-        # throughput - rtt_change(rtt - min_rtt)
+        # # base reward
+        # # throughput - rtt_change(rtt - min_rtt)
         reward = state[-2] - state[2] + state[3]
 
         # # owl reward
@@ -195,11 +195,14 @@ class RlccEnv(gym.Env):
         # deta = 0.5
         # reward = state[-2] - deta * (1/(1-loss)) # ?有问题，很小
 
-        # # aurora reward
+        # # # aurora reward
         # if state[-1]<1:
         #     state[-1]=1
         # loss = state[6] / state[-1]  # loss of this sample interval
         # reward = 10*state[-2] - 1000*state[2] - 2000*loss  # 这个奖励在异构训练环境，奖励会不均匀
+
+        # # new reward
+        # reward = state[-2] - 100*(state[2] - state[3])
 
         # # copa reward
         # # log(throughput) - beta * log(delay)
@@ -211,6 +214,7 @@ class RlccEnv(gym.Env):
         # # throughput - beta * delay
         # beta = 1
         # reward = state[-2] - beta * state[2]
+
 
         return reward
 
@@ -284,8 +288,10 @@ class RlccEnv(gym.Env):
 
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None):
         # gym环境通过reset来启动和重新开启环境
-        
-        self.step_count = 0
+        # T:230321
+        if self.step_count > 50: # 连续重启不算
+            self.rp.publish('redis', f"{self.rlcc_flag}stop") # 此时sampleFactory的重启会生效，50算是最短重启步数？
+            self.step_count = 0
         
         # 重启新流
         self.rp.publish('redis', self.rlcc_flag)
@@ -294,7 +300,7 @@ class RlccEnv(gym.Env):
         self.state = self._get_obs()
         if len(self.state) == 1:   # sometimes reset failed while async samplers in rllib, continue reset
                                     # tianshou 也出现了 重启失败的案例 ： 可能是上次退出的残留信息干扰了结果
-                                    # 重复启动可以解决问题，但是不完美 ： 订阅机制可能是个办法
+                                    # 重复启动可以解决问题，但是不完美 
             self.reset()
         print(f"reset : {self.rlcc_flag} : {self.state}")
         
@@ -327,7 +333,7 @@ class RlccEnv(gym.Env):
             action = [self._action_to_direction[action]]
         else:
             action = np.clip(action, self.action_min, self.action_max)
-        # print(action, type(action)) # 适配rllib，tianshou
+        # 适配rllib，tianshou
         if isinstance(action, np.int64):
             action = [action]
 
@@ -355,11 +361,8 @@ class RlccEnv(gym.Env):
         # # new api https://github.com/openai/gym/pull/2752
         # # state, reward, terminated, truncated, info
         if len(self.state) == 1:
-            # # return
             return self.last_state[:-3], self.reward_function(self.last_state), True, False, {}
-        # state, reward, done, info
         self.last_state = self.state
-        # # return
         return self.state[:-3], self.reward_function(self.state), False, False, {}
         
 

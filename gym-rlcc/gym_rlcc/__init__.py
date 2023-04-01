@@ -9,3 +9,13 @@ register(
     id="gym_rlcc/rlcc-v1",
     entry_point="gym_rlcc.envs:RlccEnvMulti",
 )
+
+register(
+    id="gym_rlcc/rlcc-v0-rllib",
+    entry_point="gym_rlcc.envs:RlccEnvR",
+)
+
+register(
+    id="gym_rlcc/rlcc-v1-rllib",
+    entry_point="gym_rlcc.envs:RlccEnvMultiR",
+)

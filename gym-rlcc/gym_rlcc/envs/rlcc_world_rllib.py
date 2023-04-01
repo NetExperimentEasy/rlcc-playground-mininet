@@ -6,7 +6,7 @@ from typing import Optional, Union
 # from gym.utils import seeding
 
 
-class RlccEnvMulti(gym.Env):
+class RlccEnvR(gym.Env):
     """
     ### Description
 
@@ -133,9 +133,6 @@ class RlccEnvMulti(gym.Env):
             self.maxsteps = 1800
         self.step_count = 0
 
-        self.state_list = []
-        self.k = 3          # 多步训练
-
         # 对应rlcc.c中 pacing rate，用倍率调整
         if self.plan == 1:
             self.action_max = 3.0
@@ -169,8 +166,7 @@ class RlccEnvMulti(gym.Env):
                 2: -1,
             }
 
-        multi_step_high = np.concatenate([high for _ in range(self.k)], axis=0)
-        self.observation_space = spaces.Box(0, multi_step_high, dtype=np.float32)
+        self.observation_space = spaces.Box(0, high, dtype=np.float32)
 
         # wait until subscribe success
         # 前两次消息均是订阅消息，一次是rlcc_flag,一次是mininet
@@ -192,16 +188,21 @@ class RlccEnvMulti(gym.Env):
         # reward = state[-2] - state[2] + state[3]
 
         # # owl reward
+        # if state[-1]<1:
+        #     state[-1]=1
         # loss = state[6] / state[-1]  # 这个丢包率是不是得长期丢包率？
-        # # sending_rate = state[-2]
+        # # # sending_rate = state[-2]
         # deta = 0.5
-        # reward = state[-2] - deta * (1/(1-loss))
+        # reward = state[-2] - deta * (1/(1-loss)) # ?有问题，很小
 
-        # aurora reward
-        if state[-1]<1:
-            state[-1]=1
-        loss = state[6] / state[-1]  # loss of this sample interval
-        reward = 10*state[-2] - 1000*state[2] - 2000*loss
+        # # # aurora reward
+        # if state[-1]<1:
+        #     state[-1]=1
+        # loss = state[6] / state[-1]  # loss of this sample interval
+        # reward = 10*state[-2] - 1000*state[2] - 2000*loss  # 这个奖励在异构训练环境，奖励会不均匀
+
+        # new reward
+        reward = state[-2] - 100*(state[2] - state[3])
 
         # # copa reward
         # # log(throughput) - beta * log(delay)
@@ -213,6 +214,7 @@ class RlccEnvMulti(gym.Env):
         # # throughput - beta * delay
         # beta = 1
         # reward = state[-2] - beta * state[2]
+
 
         return reward
 
@@ -286,7 +288,7 @@ class RlccEnvMulti(gym.Env):
 
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None):
         # gym环境通过reset来启动和重新开启环境
-        self.state_list = []        
+        
         self.step_count = 0
         
         # 重启新流
@@ -296,40 +298,24 @@ class RlccEnvMulti(gym.Env):
         self.state = self._get_obs()
         if len(self.state) == 1:   # sometimes reset failed while async samplers in rllib, continue reset
                                     # tianshou 也出现了 重启失败的案例 ： 可能是上次退出的残留信息干扰了结果
-                                    # 重复启动可以解决问题，但是不完美 ： 订阅机制可能是个办法
+                                    # 重复启动可以解决问题，但是不完美 
             self.reset()
         print(f"reset : {self.rlcc_flag} : {self.state}")
 
-        if len(self.state_list) == 0:
-            # 重置一次就成功
-            for _ in range(self.k):
-                self.state_list.append(self.state[:-3])
-        elif len(self.state_list[0]) == 1:
-            # 首次重置失败，递归重置触发，用最新的state初始化state_list
-            self.state_list = []
-            for _ in range(self.k):
-                self.state_list.append(self.state[:-3])  # 最后三位是专属用于计算奖励
-
-        # # tianshou, sampleFactory
-        # # state, info
-        return np.concatenate(self.state_list, axis=0), {}
-
         # # rllib 
-        # return np.concatenate(self.state_list, axis=0)
+        return self.state[:-3]      # 最后三位是专属用于计算奖励
+        
 
     def step(self, action):
+        
         # 超时检测，太长时间没有结束，则主动结束此流
         self.step_count += 1
         if self.step_count >= self.maxsteps:
             self.rp.publish('redis', f"{self.rlcc_flag}stop")
             self.step_count = 0
-            # # return
-            # # old api
-            # return np.concatenate(self.state_list, axis=0), self.reward_function(self.last_state), True, {}
 
-            # # new api https://github.com/openai/gym/pull/2752
-            # # state, reward, terminated, truncated, info
-            return np.concatenate(self.state_list, axis=0), self.reward_function(self.last_state), False, True, {}
+            # old api
+            return self.last_state[:-3], self.reward_function(self.last_state), True, {}
 
         # 动作处理，适应不同的RL框架
         if self.plan >= 2:  # 离散cwnd动作
@@ -351,38 +337,17 @@ class RlccEnvMulti(gym.Env):
         # 获取下一步状态
         self.state = self._get_obs()
         
-        # 流结束
-        # # old api
-        # if len(self.state) == 1:
-        #     return np.concatenate(self.state_list, axis=0), self.reward_function(self.last_state), True, {}
-
-        # if len(self.state_list) == 0:
-        #     for _ in range(self.k):
-        #         self.state_list.append(self.state[:-3])
-        # else:
-        #     self.state_list.pop(0)
-        #     self.state_list.append(self.state[:-3])
-
-        # # state, reward, done, info
-        # self.last_state = self.state
-        # return np.concatenate(self.state_list, axis=0), self.reward_function(self.state), False, {}
-
-        # # new api https://github.com/openai/gym/pull/2752
-        # # state, reward, terminated, truncated, info
+        # # 流结束
+        
+        # old api
         if len(self.state) == 1:
-            return np.concatenate(self.state_list, axis=0), self.reward_function(self.last_state), True, False, {}
-
-        if len(self.state_list) == 0:
-            for _ in range(self.k):
-                self.state_list.append(self.state[:-3])
-        else:
-            self.state_list.pop(0)
-            self.state_list.append(self.state[:-3])
-
+            # # return
+            return self.last_state[:-3], self.reward_function(self.last_state), True, {}
         # state, reward, done, info
         self.last_state = self.state
-        return np.concatenate(self.state_list, axis=0), self.reward_function(self.state), False, False, {}
-
+        # # return
+        return self.state[:-3], self.reward_function(self.state), False, {}
+        
 
     def render(self):
         return
