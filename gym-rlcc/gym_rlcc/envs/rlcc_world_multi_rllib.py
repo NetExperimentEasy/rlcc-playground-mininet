@@ -81,7 +81,7 @@ class RlccEnvMultiR(gym.Env):
     """
     # metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 4}
 
-    def __init__(self, config: dict, render_mode: Optional[str] = None):
+    def __init__(self, config: dict, render_mode: Optional[str] = None, redis_host: str="0.0.0.0", redis_port: int=6379):
 
         assert config["rlcc_flag"], "you need init rlcc_flag by config['rlcc_flag']"
 
@@ -95,8 +95,8 @@ class RlccEnvMultiR(gym.Env):
 
         channels = [f"rlccstate_{self.rlcc_flag}"]  # rlcc channel
         channels.append('mininet')  # mininet channel
-        r = Redis(host='0.0.0.0', port=6379)
-        self.rp = Redis(host='0.0.0.0', port=6379)
+        r = Redis(host=redis_host, port=redis_port)
+        self.rp = Redis(host=redis_host, port=redis_port)
         pub = r.pubsub()
         pub.subscribe(channels)
         self.msg_stream = pub.listen()
