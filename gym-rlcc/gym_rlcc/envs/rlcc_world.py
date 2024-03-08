@@ -54,17 +54,17 @@ class RlccEnv(gym.Env):
     | 0   | cwnd             | 0.0  | np.finfo(np.float32).max |  /1460
     | 1   | pacing_rate      | 0.0  | np.finfo(np.float32).max |  /1460
     | 2   | rtt              | 0.0  | np.finfo(np.float32).max |  /512
-    | 2   | min_rtt          | 0.0  | np.finfo(np.float32).max |  /512
-    | 3   | srtt             | 0.0  | np.finfo(np.float32).max |  /512
-    | 4   | inflight         | 0.0  | np.finfo(np.float32).max |  /16384
-    | 5   | rlcclost         | 0.0  | np.finfo(np.float32).max |
-    | 6   | lost_pkts        | 0.0  | np.finfo(np.float32).max |
-    | 7   | is_app_limited   | 0.0  |           1.0            |
+    | 3   | min_rtt          | 0.0  | np.finfo(np.float32).max |  /512
+    | 4   | srtt             | 0.0  | np.finfo(np.float32).max |  /512
+    | 5   | inflight         | 0.0  | np.finfo(np.float32).max |  /16384
+    | 6   | rlcclost         | 0.0  | np.finfo(np.float32).max |
+    | 7   | lost_pkts        | 0.0  | np.finfo(np.float32).max |
+    | 8   | is_app_limited   | 0.0  |           1.0            |
 
     # not in observation but in self.state
-    | 8   | delivery_rate    | 0.0  | np.finfo(np.float32).max |  /1024
-    | 9   | throughput       | 0.0  | np.finfo(np.float32).max |  /1024
-    | 10  | sended_interval  | 0.0  | np.finfo(np.float32).max |
+    | 9   | delivery_rate    | 0.0  | np.finfo(np.float32).max |  /1024
+    | 10  | throughput       | 0.0  | np.finfo(np.float32).max |  /1024
+    | 11  | sended_interval  | 0.0  | np.finfo(np.float32).max |
 
     ### Rewards
 

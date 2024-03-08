@@ -74,9 +74,9 @@ class DataSource:
                         # }, dtype=np.float32), ignore_index=True)
                         if current_channel == channel[0]:  # 每个线程[目标channel，mininet]
                             self.datas[channel[0]].throughput.append(
-                                np.float32(data_list[-2])*8/1024),
+                                np.float32(data_list[-2])*8/1024/1024),
                             self.datas[channel[0]].delivered_rate.append(
-                                np.float32(data_list[-3])*8/1024),
+                                np.float32(data_list[-3])*8/1024/1024),
                             self.datas[channel[0]].rtt.append(
                                 np.float32(data_list[2])/1024),
                             self.datas[channel[0]].loss.append(
@@ -93,7 +93,7 @@ class DataSource:
 
 if __name__ == "__main__":
     channels_list = [
-        "rlccstate_1001",
+        # "rlccstate_1001",
         "rlccstate_1002",
         # "rlccstate_1003",
         # "rlccstate_1004",
@@ -137,12 +137,12 @@ if __name__ == "__main__":
             showarea[channel][2].line_chart(
                 datasource.datas[channel].throughput)
             showarea[channel][3].text(
-                f"Throughput:{datasource.datas[channel].throughput[-1] if len(datasource.datas[channel].throughput) > 1 else ''}Kbps")
+                f"Throughput:{datasource.datas[channel].throughput[-1] if len(datasource.datas[channel].throughput) > 1 else ''}Mbps")
             # delivered_rate
             showarea[channel][4].line_chart(
                 datasource.datas[channel].delivered_rate)
             showarea[channel][5].text(
-                f"Delivered_rate:{datasource.datas[channel].delivered_rate[-1] if len(datasource.datas[channel].delivered_rate) > 1 else ''}Kbps")
+                f"Delivered_rate:{datasource.datas[channel].delivered_rate[-1] if len(datasource.datas[channel].delivered_rate) > 1 else ''}Mbps")
             # RTT
             showarea[channel][6].line_chart(
                 datasource.datas[channel].rtt[10:])

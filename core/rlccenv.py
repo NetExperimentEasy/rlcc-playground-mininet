@@ -110,12 +110,15 @@ class RlccMininet:
         """
         set random env to link
         """
-        e = random.randrange(0, 10)
-        rate = f'{random.randrange(10,100)}Mbit'
+        e1 = random.randrange(0, 10)
+        e2 = random.randrange(0, 10)
+        rate = f'{random.randrange(5,100)}Mbit'
         buffer = f'{random.randrange(1400,2000)}b'
-        delay = f'{random.randrange(5,400)}ms' if e > 7 else \
-            f'{random.randrange(5,100)}ms'
-        loss = f'{random.randrange(0,200)/10}%' if e > 5 else '0%'
+        # delay = f'{random.randrange(5,400)}ms' if e > 7 else \
+        #     f'{random.randrange(5,100)}ms'
+        # loss = f'{random.randrange(0,200)/10}%' if e > 7 else '0%'
+        delay = f'{random.randrange(5,50)}ms'
+        loss =  '0%'
 
         cmd_at(switch, traffic_shaping, ifbackend=False,
                mode='both',
@@ -132,9 +135,9 @@ class RlccMininet:
                 + f"rtt:{delay};loss:{loss}")
 
     def set_fix_env(self, switch, rlcc_flag=None, ifpublish=True,
-                    rate='10Mbit',
+                    rate='20Mbit',
                     buffer='1600b',
-                    delay='400ms',
+                    delay='200ms',
                     loss='0%'
                     ):
         cmd_at(switch, traffic_shaping, ifbackend=False,

@@ -24,6 +24,6 @@ pcaplist = [
 
 Exp = RlccMininet(map_c_2_rlcc_flag, XQUIC_PATH=XQUIC_PATH)
 
-# Exp.cli()
+Exp.cli()
 
-Exp.run_exp("fix", pcaplist)
+# Exp.run_exp("fix", pcaplist)

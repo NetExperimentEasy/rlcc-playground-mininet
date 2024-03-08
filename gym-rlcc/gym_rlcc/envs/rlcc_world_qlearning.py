@@ -6,7 +6,7 @@ from typing import Optional, Union
 # from gym.utils import seeding
 
 
-class RlccEnvR(gym.Env):
+class RlccEnvQ(gym.Env):
     """
     ### Description
 
@@ -60,8 +60,6 @@ class RlccEnvR(gym.Env):
     | 6   | rlcclost         | 0.0  | np.finfo(np.float32).max |
     | 7   | lost_pkts        | 0.0  | np.finfo(np.float32).max |
     | 8   | is_app_limited   | 0.0  |           1.0            |
-
-    # not in observation but in self.state
     | 9   | delivery_rate    | 0.0  | np.finfo(np.float32).max |  /1024
     | 10  | throughput       | 0.0  | np.finfo(np.float32).max |  /1024
     | 11  | sended_interval  | 0.0  | np.finfo(np.float32).max |
@@ -81,14 +79,13 @@ class RlccEnvR(gym.Env):
     """
     # metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 4}
 
-    def __init__(self, config: dict, render_mode: Optional[str] = None, redis_host: str="0.0.0.0", redis_port: int=6379):
+    def __init__(self, config: dict, render_mode: Optional[str] = None):
 
         assert config["rlcc_flag"], "you need init rlcc_flag by config['rlcc_flag']"
 
         self.rlcc_flag = config["rlcc_flag"]
         self.last_state = None      # fill state while flow is over
         self.state = None
-
         if config.__contains__("reward_function"):
             self.reward_function = config["reward_function"]
         else:
@@ -96,8 +93,8 @@ class RlccEnvR(gym.Env):
 
         channels = [f"rlccstate_{self.rlcc_flag}"]  # rlcc channel
         channels.append('mininet')  # mininet channel
-        r = Redis(host=redis_host, port=redis_port)
-        self.rp = Redis(host=redis_host, port=redis_port)
+        r = Redis(host='0.0.0.0', port=6379)
+        self.rp = Redis(host='0.0.0.0', port=6379)
         pub = r.pubsub()
         pub.subscribe(channels)
         self.msg_stream = pub.listen()
@@ -113,9 +110,9 @@ class RlccEnvR(gym.Env):
                 np.finfo(np.float32).max,  # lost_interval  # 采样周期内的丢包数
                 np.finfo(np.float32).max,  # lost_pkts   # sampler周期内约rtt的丢包
                 np.finfo(np.float32).max,  # is_app_limited
-                # np.finfo(np.float32).max,  # delivery_rate   # 后两维不放入状态空间
-                # np.finfo(np.float32).max,  # throughput (sending rate)
-                # np.finfo(np.float32).max,  # sended_interval 
+                np.finfo(np.float32).max,  # delivery_rate   # 后两维不放入状态空间
+                np.finfo(np.float32).max,  # throughput (sending rate)
+                np.finfo(np.float32).max,  # sended_interval 
             ],
             dtype=np.float32,
         )
@@ -125,7 +122,7 @@ class RlccEnvR(gym.Env):
         if "plan" in config.keys():
             self.plan = config["plan"]
         else:
-            self.plan = 1
+            self.plan = 2
 
         if "maxsteps" in config.keys():
             self.maxsteps = config["maxsteps"]
@@ -158,19 +155,13 @@ class RlccEnvR(gym.Env):
             }
         # satcc方案，agent仅选择是否增加还是减少还是不动，尺度交给 自动变速器
         if self.plan == 3:
-            self.up_change_EMA = 0.1
-            self.up_stay_EMA = 0.1
-            self.down_change_EMA = 0.1
-            self.down_stay_EMA = 0.1
-            self.deliver_mean = 0
-
             self.action_max = 1
             self.action_min = -1
             self.action_space = spaces.Discrete(3)
             self._action_to_direction = {
-                0: -1,
+                0: 1,
                 1: 0,
-                2: 1,
+                2: -1,
             }
 
         self.observation_space = spaces.Box(0, high, dtype=np.float32)
@@ -194,6 +185,10 @@ class RlccEnvR(gym.Env):
         # # throughput - rtt_change(rtt - min_rtt)
         # reward = state[-2] - state[2] + state[3]
 
+        # reward = state[-2] - 3*(state[2] - state[3])
+        # 用delivered rate可能会更好
+        reward = state[-3] - state[2] + state[3]
+        
         # # owl reward
         # if state[-1]<1:
         #     state[-1]=1
@@ -208,41 +203,13 @@ class RlccEnvR(gym.Env):
         # loss = state[6] / state[-1]  # loss of this sample interval
         # reward = 10*state[-2] - 1000*state[2] - 2000*loss  # 这个奖励在异构训练环境，奖励会不均匀
 
-        # new reward
+        # # new reward
         # reward = state[-2] - 100*(state[2] - state[3])
-
-        # line
-        reward = state[-3] - 100*(state[2] - state[3])
-
-        # 3log
-        # reward = np.log(state[-3]/10) + np.log(state[-3]/100) + np.log(state[-3]/100) - 3*np.log(state[2] - state[3])
-        # repair low bandwidth th performence.
-        
-        # *8/1024  log8
-        # dr = state[-3]*8/1024
-        # reward = np.log(dr) - np.log(state[2] - state[3])
-
-        # up
-        # dr_up = state[-3]-self.deliver_mean
-        # if dr_up > 0:
-        #     dr_up = np.log(dr_up)
-        # elif dr_up < 0:
-        #     dr_up = -np.log(-dr_up)
-        # else:
-        #     dr_up = 0
-        # rt_up = state[2] - state[3]
-        # if rt_up > 0:
-        #     rt_up = np.log(rt_up)
-        # elif rt_up < 0:
-        #     rt_up = -np.log(-rt_up)
-        # else:
-        #     rt_up = 0
-        # reward = dr_up - rt_up
 
         # # copa reward
         # # log(throughput) - beta * log(delay)
         # beta = 1
-        # reward = np.log(state[-2]) - beta * np.log(state[2])
+        # reward = np.log(state[-2]) - beta * np.log(state[2] - state[3])
 
         # # mvfst reward 
         # # 发现copa的奖励函数在训练的时候, 0.5Mbps和100Mbps环境一起训练会有问题
@@ -323,8 +290,10 @@ class RlccEnvR(gym.Env):
 
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None):
         # gym环境通过reset来启动和重新开启环境
-        
-        self.step_count = 0
+        # T:230321
+        if self.step_count > 50: # 连续重启不算
+            self.rp.publish('redis', f"{self.rlcc_flag}stop") # 此时sampleFactory的重启会生效，50算是最短重启步数？
+            self.step_count = 0
         
         # 重启新流
         self.rp.publish('redis', self.rlcc_flag)
@@ -335,13 +304,15 @@ class RlccEnvR(gym.Env):
                                     # tianshou 也出现了 重启失败的案例 ： 可能是上次退出的残留信息干扰了结果
                                     # 重复启动可以解决问题，但是不完美 
             self.reset()
-        # print(f"reset : {self.rlcc_flag} : {self.state}")
+        print(f"reset : {self.rlcc_flag} : {self.state}")
+        
+        # # tianshou, sampleFactory
+        # # state, info
+        return self.state, {}
 
         # # rllib 
-        return self.state[:-3]      # 最后三位是专属用于计算奖励
+        # return self.state[:-3]      # 最后三位是专属用于计算奖励
         
-    def EMA(self, new, old, rate): # rate 4, 8
-        return (1/rate)*new + ((rate-1)/rate)*old
 
     def step(self, action):
         
@@ -350,54 +321,23 @@ class RlccEnvR(gym.Env):
         if self.step_count >= self.maxsteps:
             self.rp.publish('redis', f"{self.rlcc_flag}stop")
             self.step_count = 0
+            # # return
+            # # old api
+            # return self.last_state[:-3], self.reward_function(self.last_state), True, {}
 
-            # old api
-            return self.last_state[:-3], self.reward_function(self.last_state), True, {}
+            # # new api https://github.com/openai/gym/pull/2752
+            # # state, reward, terminated, truncated, info
+            return self.last_state[:-3], self.reward_function(self.last_state), False, True, {}
 
         # 动作处理，适应不同的RL框架
-        if self.plan == 1:
+        if self.plan >= 2:  # 离散cwnd动作
+            action = np.clip(action, self.action_min, self.action_max+1) # clip 左闭右开
+            action = [self._action_to_direction[action]]
+        else:
             action = np.clip(action, self.action_min, self.action_max)
-
-        if self.plan == 2:  # 离散cwnd动作
-            action = self._action_to_direction[action]
-            action = np.clip(action, self.action_min, self.action_max+1) # clip 左闭右开
+        # 适配rllib，tianshou
+        if isinstance(action, np.int64):
             action = [action]
-
-        # action # for satcc action -> -1 0 1
-        cwnd_change = 0
-        if self.plan == 3:
-            self.deliver_mean = self.EMA(self.state[-3], self.deliver_mean, 8)
-            action = self._action_to_direction[action]
-            action = np.clip(action, self.action_min, self.action_max+1) # clip 左闭右开
-            action_choosed = action
-            if action_choosed == 0:
-                self.up_stay_EMA = self.EMA(5, self.up_stay_EMA, 4)
-                self.up_change_EMA = self.EMA(5, self.up_change_EMA, 4)
-                self.down_stay_EMA = self.EMA(5, self.down_stay_EMA, 4)
-                self.down_change_EMA = self.EMA(5, self.down_change_EMA, 4)
-                # print(f"-----{action},{self.up_stay_EMA}{self.up_change_EMA}{self.down_stay_EMA}{self.down_change_EMA} --- {cwnd_change}")
-            elif action_choosed == 1:
-                self.up_change_EMA = self.EMA(10, self.up_change_EMA, 16) #16->4
-                self.up_stay_EMA = self.EMA(0.2, self.up_stay_EMA, 16)#16->4
-                self.down_change_EMA = self.EMA(5, self.down_change_EMA, 4)
-                cwnd_change = (int)(self.up_change_EMA/self.up_stay_EMA)+1
-                # if cwnd_change>=10:
-                #     print(f"-----{action},{self.up_stay_EMA}{self.up_change_EMA}{self.down_stay_EMA}{self.down_change_EMA} --- {cwnd_change}")
-            elif action_choosed == -1:
-                self.down_stay_EMA = self.EMA(0.2, self.down_stay_EMA, 16)#16->4
-                self.down_change_EMA = self.EMA(10, self.down_change_EMA, 16)#16->4
-                self.up_change_EMA = self.EMA(5, self.up_change_EMA, 4)
-                cwnd_change = -(int)(self.down_change_EMA/self.down_stay_EMA)-1
-                # if cwnd_change<=-10:
-                #     print(f"-----{action},{self.up_stay_EMA}{self.up_change_EMA}{self.down_stay_EMA}{self.down_change_EMA} --- {cwnd_change}")
-
-
-        # print(action, type(action)) # 适配rllib，tianshou
-        if isinstance(action, np.int64): # action 1
-            action = [action]
-
-        if self.plan == 3:
-            action = [cwnd_change]
 
         # 执行动作
         # action 1 : "0.0,0.0" cwnd_rate,pacing_rate
@@ -411,14 +351,21 @@ class RlccEnvR(gym.Env):
         
         # # 流结束
         
-        # old api
+        # # old api
+        # if len(self.state) == 1:
+        #     # # return
+        #     return self.last_state[:-3], self.reward_function(self.last_state), True, {}
+        # # state, reward, done, info
+        # self.last_state = self.state
+        # # # return
+        # return self.state[:-3], self.reward_function(self.state), False, {}
+    
+        # # new api https://github.com/openai/gym/pull/2752
+        # # state, reward, terminated, truncated, info
         if len(self.state) == 1:
-            # # return
-            return self.last_state[:-3], self.reward_function(self.last_state), True, {}
-        # state, reward, done, info
+            return self.last_state, self.reward_function(self.last_state), True, False, {}
         self.last_state = self.state
-        # # return
-        return self.state[:-3], self.reward_function(self.state), False, {}
+        return self.state, self.reward_function(self.state), False, False, {}
         
 
     def render(self):

@@ -107,5 +107,8 @@ def cmd_at(host, func, ifbackend=False, ifprint=True, **kwargs):
 
 
 def kill_pid_by_name(name: str):
-    pid = int(check_output(["pidof", "-s", f"{name}"]))
-    subprocess.call(["kill %d" % pid], shell=True)
+    try:
+        pid = int(check_output(["pidof", "-s", f"{name}"]))
+        subprocess.call(["kill %d" % pid], shell=True)
+    except subprocess.CalledProcessError:
+        return
